@@ -1,0 +1,47 @@
+services:
+  mysql-primary:
+    image: mysql:8.0
+    container_name: mysql-primary
+    environment:
+      MYSQL_ROOT_PASSWORD: FCFM
+      MYSQL_DATABASE: appdb
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppass
+    ports:
+      - "3307:3306"
+    command:
+      - "--server-id=1"
+      - "--log-bin=mysql-bin"
+      - "--binlog-do-db=appdb"
+    volumes:
+      - db_primary_data:/var/lib/mysql
+
+  mysql-replica:
+    image: mysql:8.0
+    container_name: mysql-replica
+    environment:
+      MYSQL_ROOT_PASSWORD: FCFM
+      MYSQL_DATABASE: appdb
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppass
+    ports:
+      - "3308:3306"
+    command:
+      - "--server-id=2"
+      - "--relay-log=relay-bin"
+      - "--read-only=ON"
+    depends_on:
+      - mysql-primary
+    volumes:
+      - db_replica_data:/var/lib/mysql
+
+  db-watcher:
+    build: ./db-watcher
+    container_name: db-watcher
+    depends_on:
+      - mysql-primary
+      - mysql-replica
+
+volumes:
+  db_primary_data:
+  db_replica_data:
