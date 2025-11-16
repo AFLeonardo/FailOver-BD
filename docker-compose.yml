@@ -43,9 +43,9 @@ services:
       - mysql-replica
 
   db-resync:
-  build: ./db-resync
-  container_name: db-resync
-  depends_on:
+    build: ./db-resync
+    container_name: db-resync
+    depends_on:
     - mysql-primary
     - mysql-replica
 
