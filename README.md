@@ -1,8 +1,20 @@
 # 📘 Proyecto: Sistema de Failover + Resync Automático para MySQL con Docker
 
 **Autor:** Leonardo  
-**Tecnologías:** Docker, MySQL 8, Python, Replicación Binaria, Failover Automático  
 **Objetivo:** Implementar un sistema completo de Alta Disponibilidad (HA) con failover y resincronización automática entre dos nodos MySQL.
+
+
+## 🛠 Tech Stack
+
+<div align="center">
+
+| Docker | MySQL | Python | Bash ||
+|--------|--------|---------|--------|--------|
+| <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/docker/docker-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/mysql/mysql-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/bash/bash-original.svg" width="60"/> |
+</div>
+
+
+
 
 ---
 
