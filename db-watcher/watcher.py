@@ -20,6 +20,24 @@ def checar_primary():
     except Error:
         return False
 
+def replica_es_replica():
+    """Devuelve True si mysql-replica está en read_only=1 (o sea, otra vez como réplica)."""
+    try:
+        conn = mysql.connector.connect(
+            host="mysql-replica",
+            port=3306,
+            user="root",
+            password="FCFM"
+        )
+        cursor = conn.cursor()
+        cursor.execute("SELECT @@global.read_only;")
+        (read_only,) = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(read_only) == 1
+    except Error:
+        return False
+
 def promover_replica():
     global fail_over_hecho
     try:
@@ -46,16 +64,26 @@ def promover_replica():
         print("❌ Error al promover réplica:", e)
 
 def main():
-    fallos_seguidos = 0
     global fail_over_hecho
+    fallos_seguidos = 0
 
     print("👀 Iniciando watcher...")
 
     while True:
+        # 🔄 REARMAR el watcher cuando la topología original se haya restaurado
+        # Condición: ya hicimos un failover, el primary vuelve a responder
+        # y la réplica volvió a estar en read_only (otra vez como réplica).
+        if fail_over_hecho and checar_primary() and replica_es_replica():
+            print("🔁 Topología restaurada (primary arriba y réplica en read_only). Reactivando watcher.")
+            fail_over_hecho = False
+            fallos_seguidos = 0
+
+        # Si ya hicimos failover y todavía no se restaura la topología, no hacer nada.
         if fail_over_hecho:
             time.sleep(tiempo_espera)
             continue
 
+        # Monitoreo normal del primary
         if checar_primary():
             fallos_seguidos = 0
             print("Primary OK")
