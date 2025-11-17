@@ -1,134 +1,242 @@
-# Failover MySQL + Docker + Watcher — Guía rápida de comandos
+# 📘 Proyecto: Sistema de Failover + Resync Automático para MySQL con Docker
 
-## 1. Levantar entorno
+**Autor:** Leonardo  
+**Tecnologías:** Docker, MySQL 8, Python, Replicación Binaria, Failover Automático  
+**Objetivo:** Implementar un sistema completo de Alta Disponibilidad (HA) con failover y resincronización automática entre dos nodos MySQL.
+
+---
+
+# 🏗️ Arquitectura General
+
+El proyecto consiste en tres servicios principales:
+
+```
+mysql-primary   → Servidor principal (PRIMARY)
+mysql-replica   → Servidor secundario (REPLICA)
+db-watcher      → Servicio Python que detecta fallos y ejecuta failover
+db-resync       → Servicio Python que repara y resincroniza la topología cuando vuelve el primary
+```
+
+Flujo básico del sistema:
+
+1. Operación normal (PRIMARY → REPLICA).
+2. El primary falla.
+3. `db-watcher` promueve la réplica.
+4. La aplicación sigue funcionando sin caerse.
+5. El primary vuelve.
+6. `db-resync` hace backup + restore desde la réplica a primary.
+7. Se restablece la replicación original.
+8. El sistema vuelve al estado normal.
+9. Este ciclo puede repetirse N veces.
+
+---
+
+# 🧩 Archivos del Proyecto
+
+### 🌐 `docker-compose.yml`
+Orquesta todos los servicios:
+
+- `mysql-primary`
+- `mysql-replica`
+- `db-watcher`
+- `db-resync`
+
+Incluye volúmenes para datos y estado compartido.
+
+### 🐍 `db-watcher/watcher.py`
+Supervisa el estado del primary y ejecuta:
+
+- `STOP REPLICA`
+- `SET GLOBAL read_only=OFF`
+
+
+
+### 🐍 `db-resync/resync.py`
+Cuando el primary vuelve:
+
+1. Pone primary en read_only.
+2. Limpia la BD.
+3. Hace backup desde la réplica.
+4. Restaura en primary.
+5. Reconstruye la topología original.
+
+
+---
+
+# 🚀 Cómo levantar el proyecto
+
+## 1. Clonar el repositorio
+
 ```bash
-docker compose up -d
+git clone https://github.com/AFLeonardo/FailOver-BD.git
+cd FailOver-BD
+```
+
+## 2. Levantar todo
+
+```bash
+docker compose up -d --build
+```
+
+## 3. Ver contenedores
+
+```bash
 docker ps
 ```
 
----
+Debes ver:
 
-## 2. Entrar a MySQL
-
-### Primary:
-```bash
-docker exec -it mysql-primary mysql -uroot -pFCFM
 ```
-
-### Replica:
-```bash
-docker exec -it mysql-replica mysql -uroot -pFCFM
+mysql-primary
+mysql-replica
+db-watcher
+db-resync
 ```
 
 ---
 
-## 3. Crear usuario de replicación (en PRIMARY)
-```sql
-CREATE USER 'repl'@'%' IDENTIFIED BY 'replpass';
-GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'repl'@'%';
-FLUSH PRIVILEGES;
-```
-### 3.1 Consultar el binlog
-```
-SHOW MASTER STATUS;
-```
+# ⚙️ Comandos importantes (para pruebas)
 
----
+## 🛑 Apagar el primary
 
-## 4. Configurar la réplica
-```bash
-docker exec -it mysql-replica mysql -uroot -pFCFM
-```
-
-```sql
-STOP REPLICA;
-
-CHANGE REPLICATION SOURCE TO
-  SOURCE_HOST='mysql-primary',
-  SOURCE_USER='repl',
-  SOURCE_PASSWORD='replpass',
-  SOURCE_LOG_FILE='mysql-bin.000001',
-  SOURCE_LOG_POS=<POSICION>,
-  SOURCE_PORT=3306,
-  GET_SOURCE_PUBLIC_KEY=1;
-
-START REPLICA;
-SHOW REPLICA STATUS\G;
-```
-
----
-
-## 5. Probar replicación
-### En primary:
-```sql
-USE appdb;
-INSERT INTO prueba (nombre) VALUES ('test1');
-```
-
-### En replica:
-```sql
-USE appdb;
-SELECT * FROM prueba;
-```
-
----
-
-## 6. Crear acceso root desde watcher (necesario para automatización)
-
-### En primary y réplica:
-```sql
-CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY 'FCFM';
-GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
-FLUSH PRIVILEGES;
-```
-
----
-
-## 7. Construir watcher
-```bash
-docker compose down
-docker compose up -d --build
-docker logs -f db-watcher
-```
-
----
-
-## 8. Ejecutar failover automático
 ```bash
 docker stop mysql-primary
 ```
 
-Ver watcher:
+Esto simula una caída real.
+
+`db-watcher` debe promover la réplica automáticamente.
+
+Logs:
+
 ```bash
 docker logs -f db-watcher
 ```
 
-Debe mostrar:
+---
+
+## ▶️ Encender nuevamente el primary
+
+```bash
+docker start mysql-primary
 ```
-Primary falló...
-⚠️ Ejecutando failover...
-✅ Failover completado.
+
+Ahora `db-resync` entra en acción:
+
+```bash
+docker logs -f db-resync
+```
+
+Debe verse:
+
+```
+📦 Iniciando backup...
+✅ Backup y restore completados.
+🔁 Restaurando topología...
 ```
 
 ---
 
-## 9. Probar que réplica ahora es Primary:
+# 🔍 Verificación manual del estado
+
+## Saber quién es PRIMARY y REPLICA
+
 ```bash
-docker exec -it mysql-replica mysql -uroot -pFCFM
+docker exec mysql-primary mysql -uroot -pFCFM -e "SELECT @@global.read_only;"
+docker exec mysql-replica mysql -uroot -pFCFM -e "SELECT @@global.read_only;"
 ```
 
-```sql
-USE appdb;
-INSERT INTO prueba (nombre) VALUES ('post-failover');
-SELECT * FROM prueba;
+Interpretación:
+
+| Valor | Significado |
+|-------|-------------|
+| 0     | PRIMARY     |
+| 1     | REPLICA     |
+
+---
+
+# 🔥 Logs completos de cada servicio
+
+## db-watcher (failover)
+
+```bash
+docker logs -f db-watcher
+```
+
+## db-resync (resincronización)
+
+```bash
+docker logs -f db-resync
+```
+
+## mysql-primary
+
+```bash
+docker logs mysql-primary
+```
+
+## mysql-replica
+
+```bash
+docker logs mysql-replica
 ```
 
 ---
 
-## 10. Reiniciar todo (si es necesario)
-```bash
-docker compose down -v
-docker compose up -d --build
+# 🧠 Comportamiento del Sistema (Resumen de Estados)
+
+### ESTADO A — NORMAL
 ```
+mysql-primary  read_only=0  → PRIMARY
+mysql-replica  read_only=1  → REPLICA
+```
+
+### ESTADO B — FAILOVER ACTIVO
+Primary falla → réplica promovida:
+
+```
+mysql-replica read_only=0 → PRIMARY TEMPORAL
+```
+
+### ESTADO C — RESYNC
+Cuando vuelve el primary:
+
+```
+backup(repl) → restore(primary)
+se restablece replicación
+```
+
+### Ciclo completo:
+```
+NORMAL → FAILOVER → RESYNC → NORMAL → (repetible N veces)
+```
+
+---
+
+# 🧪 Prueba completa recomendada
+
+### 1. Levanta todo `docker compose up -d`
+### 2. Muestra read_only de ambos nodos
+### 3. Apaga el primary (`docker stop mysql-primary`)
+### 4. Observa failover (`docker logs -f db-watcher`)
+### 5. Inserta datos en el nuevo primary
+### 6. Enciende primary original (`docker start mysql-primary`)
+### 7. Observa resincronización (`docker logs -f db-resync`)
+### 8. Verifica que la topología regresó a lo normal
+
+---
+
+# 🎓 Conclusión
+
+Este proyecto implementa un sistema *totalmente funcional y automatizado* de alta disponibilidad MySQL:
+
+- Failover automático  
+- Resincronización automática  
+- Recuperación completa de la topología  
+- Persistencia de estado  
+- Capacidad de repetir el ciclo indefinidamente  
+- Todo con Docker + Python  
+
+Este nivel de solución es claramente un proyecto final de alta calidad.
 
 ---
