@@ -51,7 +51,7 @@ def preparar_primary_original():
     print("🔧 Preparando mysql-primary en modo seguro (solo lectura y DB limpia)...")
     conn = conectar("mysql-primary")
     cur = conn.cursor()
-    cur.execute("SET GLOBAL super_read_only = ON;")
+    #cur.execute("SET GLOBAL super_read_only = ON;")
     cur.execute("SET GLOBAL read_only = ON;")
     cur.execute(f"DROP DATABASE IF EXISTS {DB_NAME};")
     cur.execute(f"CREATE DATABASE {DB_NAME};")
@@ -60,18 +60,17 @@ def preparar_primary_original():
     conn.close()
     print("✅ mysql-primary preparado.")
 
-
 def backup_y_restore():
     print("📦 Iniciando backup desde mysql-replica y restore a mysql-primary...")
 
     cmd = (
-        f"mysqldump -h mysql-replica -uroot -p{ROOT_PASSWORD} {DB_NAME} "
-        f"| mysql -h mysql-primary -uroot -p{ROOT_PASSWORD} {DB_NAME}"
+        f"mysqldump --skip-ssl -h mysql-replica -uroot -p{ROOT_PASSWORD} {DB_NAME} "
+        f"| mysql --skip-ssl -h mysql-primary -uroot -p{ROOT_PASSWORD} {DB_NAME}"
     )
 
-    # shell=True porque usamos un pipe |
     subprocess.run(cmd, shell=True, check=True)
     print("✅ Backup y restore completados.")
+
 
 
 def configurar_primary_como_primary_y_replica_como_replica():
@@ -143,14 +142,10 @@ def configurar_primary_como_primary_y_replica_como_replica():
 
 
 def main():
-    global resync_hecho
-
+    
     print("👀 Iniciando db-resync (resincronización automática)...")
 
     while True:
-        if resync_hecho:
-            time.sleep(CHECK_INTERVAL)
-            continue
 
         # 1) Ver si mysql-primary ya está disponible
         if not primary_original_disponible():
@@ -171,8 +166,7 @@ def main():
             preparar_primary_original()
             backup_y_restore()
             configurar_primary_como_primary_y_replica_como_replica()
-            resync_hecho = True
-            print("🎉 Resincronización completada. db-resync ya no realizará más acciones.")
+            print("🎉 Resincronización completada.")
         except Exception as e:
             print("❌ Error durante la resincronización:", e)
 
