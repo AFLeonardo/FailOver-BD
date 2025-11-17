@@ -32,7 +32,7 @@ VALUES
 (4, 600.00);
 
 
--- Creamos la vista
+/* -- Creamos la vista
 CREATE VIEW vista_pedidos AS
 SELECT 
     p.id_pedido AS 'ID Pedido',
@@ -44,7 +44,7 @@ INNER JOIN
     Clientes c ON p.id_cliente = c.id_cliente;
 
 -- Consultamos la vista
-SELECT * FROM vista_pedidos;
+SELECT * FROM vista_pedidos; */
 
 --Crear trigger
 DELIMITER $$
