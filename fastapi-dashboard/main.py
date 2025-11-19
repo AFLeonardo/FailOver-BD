@@ -1,8 +1,16 @@
 import mysql.connector
 from fastapi import FastAPI
-from datetime import datetime
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 app = FastAPI()
+
+# ---- ENDPOINT /status ----
+class StatusResponse(BaseModel):
+    primary_node: str | None = None
+    replica_node: str | None = None
+    event_type: str | None = None
+    last_failover: str | None = None
 
 @app.get("/status")
 def get_status():
@@ -33,3 +41,6 @@ def get_latest_status():
     conn.close()
 
     return row
+
+# Montar archivos estáticos (HTML, CSS, JS)
+app.mount("/static", StaticFiles(directory="static"), name="static")
