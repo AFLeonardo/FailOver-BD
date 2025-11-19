@@ -49,6 +49,15 @@ services:
     - mysql-primary
     - mysql-replica
 
+  fastapi-dashboard:
+    build:  
+      context: ./fastapi-dashboard
+    container_name: fastapi-dashboard
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mysql-primary
+      - mysql-replica
 
 volumes:
   db_primary_data:
