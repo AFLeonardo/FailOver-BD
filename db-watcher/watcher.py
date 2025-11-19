@@ -1,6 +1,7 @@
 import time
 import mysql.connector
 from mysql.connector import Error
+from datetime import datetime
 
 max_fallos = 3
 tiempo_espera = 5
@@ -60,8 +61,36 @@ def promover_replica():
 
         fail_over_hecho = True
         print("✅ Failover completado.")
+        log_failover(new_primary="mysql-replica", new_replica="mysql-primary")
     except Error as e:
         print("❌ Error al promover réplica:", e)
+
+def log_failover(new_primary, new_replica):
+    conn = mysql.connector.connect(
+        host="mysql-replica",
+        port=3306,
+        user="appuser",
+        password="apppass",
+        database="appdb"
+    )
+    cursor = conn.cursor()
+
+    query = """
+        INSERT INTO system_events (primary_node, replica_node, last_failover, last_backup)
+        VALUES (%s, %s, %s, %s)
+    """
+    values = (
+        new_primary,
+        new_replica,
+        datetime.now(),
+        None,
+    )
+
+    cursor.execute(query, values)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
 
 def main():
     global fail_over_hecho
