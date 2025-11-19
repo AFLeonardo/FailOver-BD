@@ -1,3 +1,6 @@
+import os
+from typing import List, Optional
+from datetime import datetime
 import mysql.connector
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -5,31 +8,44 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
-# ---- ENDPOINT /status ----
+# ---------- MODELOS ----------
+
+class Event(BaseModel):
+    event_type: str
+    primary_node: Optional[str] = None
+    replica_node: Optional[str] = None
+    last_failover: Optional[datetime] = None
+    last_backup: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
 class StatusResponse(BaseModel):
-    primary_node: str | None = None
-    replica_node: str | None = None
-    event_type: str | None = None
-    last_failover: str | None = None
+    primary_node: Optional[str] = None
+    replica_node: Optional[str] = None
+    event_type: Optional[str] = None
+    created_at: Optional[datetime] = None   # ← fecha oficial
+    history: List[Event] = []
 
-@app.get("/status")
-def get_status():
-    row = get_latest_status()
-    return row
 
-def get_latest_status():
-    conn = mysql.connector.connect(
-        host="mysql-replica",      # aquí va tu host (por ejemplo: "localhost" o el nombre del contenedor)
-        port=3306,       # si usas otro puerto, cámbialo
-        user="appuser",      # tu usuario MySQL
-        password="apppass",  # tu contraseña
-        database="appdb" # o el nombre real de tu BD
+def get_db_conn():
+    return mysql.connector.connect(
+        host="mysql-replica",   # servicio docker
+        port=3306,
+        user="appuser",
+        password="apppass",
+        database="appdb",
     )
 
+def get_latest_status():
+    conn = get_db_conn()
     cursor = conn.cursor(dictionary=True)
 
     query = """
-        SELECT primary_node, replica_node, last_failover, last_backup, event_type
+        SELECT primary_node,
+               replica_node,
+               last_failover,
+               last_backup,
+               created_at,
+               event_type
         FROM system_events
         ORDER BY created_at DESC
         LIMIT 1
@@ -39,8 +55,53 @@ def get_latest_status():
 
     cursor.close()
     conn.close()
-
     return row
 
-# Montar archivos estáticos (HTML, CSS, JS)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+def get_last_events(limit: int = 10):
+    conn = get_db_conn()
+    cursor = conn.cursor(dictionary=True)
+
+    query = """
+        SELECT primary_node,
+               replica_node,
+               last_failover,
+               last_backup,
+               created_at,
+               event_type
+        FROM system_events
+        ORDER BY created_at DESC
+        LIMIT %s
+    """
+    cursor.execute(query, (limit,))
+    rows = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+    return rows
+
+
+# ---- ENDPOINT /status ----
+@app.get("/status", response_model=StatusResponse)
+def get_status():
+    latest = get_latest_status()
+    history = get_last_events(limit=10)
+
+    if not latest:
+        return StatusResponse(history=[])
+
+    return StatusResponse(
+        primary_node=latest.get("primary_node"),
+        replica_node=latest.get("replica_node"),
+        event_type=latest.get("event_type"),
+        last_failover=None,
+        last_backup=None,
+        history=history,
+        created_at=latest.get("created_at")
+    )
+
+
+# ---------- STATIC ----------
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+static_dir = os.path.join(BASE_DIR, "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
