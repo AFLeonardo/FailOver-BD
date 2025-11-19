@@ -1,139 +1,151 @@
-# 📘 Proyecto: Sistema de Failover + Resync Automático para MySQL con Docker
+# 📘 Sistema de Failover + Resync Automático para MySQL con Docker
 
 **Autor:** Leonardo  
-**Objetivo:** Implementar un sistema completo de Alta Disponibilidad (HA) con failover y resincronización automática entre dos nodos MySQL.
+**Objetivo del proyecto:** Implementar un sistema de Alta Disponibilidad (HA) para MySQL utilizando Docker Compose, con:  
+- Failover automático  
+- Replicación asíncrona  
+- Resincronización cuando un nodo vuelve  
+- Watcher en Python  
+- Servicio de resync dedicado  
+- API con FastAPI + dashboard web
+
 
 
 ## 🛠 Tech Stack
 
 <div align="center">
 
-| Docker | MySQL | Python | Bash ||
-|--------|--------|---------|--------|--------|
-| <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/docker/docker-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/mysql/mysql-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/bash/bash-original.svg" width="60"/> |
+| Docker | MySQL | Python | FastAPI | Bash | TailwindCSS | JavaScript | HTML5 |
+|--------|--------|---------|---------|--------|--------------|------------|--------|
+| <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/docker/docker-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/mysql/mysql-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/fastapi/fastapi-original.svg" width="55"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/bash/bash-original.svg" width="60"/> | <img src="https://www.vectorlogo.zone/logos/tailwindcss/tailwindcss-icon.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg" width="60"/> | <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/html5/html5-original.svg" width="60"/> |
+
+
+
+
 </div>
 
 
 
+## 🏗 Arquitectura General
 
----
+El sistema está formado por **contenedores Docker** definidos en `docker-compose.yml`:
 
-# 🏗️ Arquitectura General
+- **mysql-primary** → Nodo principal (PRIMARY)  
+- **mysql-replica** → Nodo secundario (REPLICA) sincronizado por binlogs  
+- **db-watcher** → Servicio Python que monitoriza y dispara el failover  
+- **db-resync** → Servicio Python que resincroniza nodos desactualizados  
+- **fastapi-dashboard** → API FastAPI + dashboard web (HTML estático)
 
-El proyecto consiste en tres servicios principales:
+
+## 📐 Diagrama general
 
 ```
-mysql-primary   → Servidor principal (PRIMARY)
-mysql-replica   → Servidor secundario (REPLICA)
-db-watcher      → Servicio Python que detecta fallos y ejecuta failover
-db-resync       → Servicio Python que repara y resincroniza la topología cuando vuelve el primary
+                         ┌─────────────────────────────┐
+                         │     fastapi-dashboard       │
+                         │   - FastAPI (API REST)      │
+                         │   - Dashboard HTML          │
+                         └─────────────┬───────────────┘
+                                       │
+                               Usuario / Navegador
+                                       │
+                     ┌─────────────────┴─────────────────┐
+                     │                                   │
+        ┌────────────────────────┐           ┌────────────────────────┐
+        │      mysql-primary     │           │     mysql-replica      │
+        │      Role: PRIMARY     │◄────────►│     Role: REPLICA      │
+        │  Binlogs habilitados   │           │ IO/SQL threads activos │
+        └─────────────┬──────────┘           └─────────────┬──────────┘
+                      │                                    │
+                      └──────────────┬─────────────────────┘
+                                     │
+                      ┌────────────────────────────┐
+                      │        db-watcher          │
+                      │  - Heartbeat               │
+                      │  - Failover automático     │
+                      │  - Registro de eventos     │
+                      └────────────────────────────┘
+
+                      ┌────────────────────────────┐
+                      │         db-resync          │
+                      │  - Dump/restore            │
+                      │  - Reconfig. replicación   │
+                      └────────────────────────────┘
 ```
 
-Flujo básico del sistema:
-
-1. Operación normal (PRIMARY → REPLICA).
-2. El primary falla.
-3. `db-watcher` promueve la réplica.
-4. La aplicación sigue funcionando sin caerse.
-5. El primary vuelve.
-6. `db-resync` hace backup + restore desde la réplica a primary.
-7. Se restablece la replicación original.
-8. El sistema vuelve al estado normal.
-9. Este ciclo puede repetirse N veces.
-
----
-
-# 🧩 Archivos del Proyecto
-
-### 🌐 `docker-compose.yml`
-Orquesta todos los servicios:
-
-- `mysql-primary`
-- `mysql-replica`
-- `db-watcher`
-- `db-resync`
-
-Incluye volúmenes para datos y estado compartido.
-
-### 🐍 `db-watcher/watcher.py`
-Supervisa el estado del primary y ejecuta:
-
-- `STOP REPLICA`
-- `SET GLOBAL read_only=OFF`
 
 
+## ⚙️ Flujo de Failover y Recovery
 
-### 🐍 `db-resync/resync.py`
-Cuando el primary vuelve:
+### 🟥 **Cuando el primary cae**
 
-1. Pone primary en read_only.
-2. Limpia la BD.
-3. Hace backup desde la réplica.
-4. Restaura en primary.
-5. Reconstruye la topología original.
+1. `db-watcher` deja de recibir respuesta de `mysql-primary`.  
+2. Marca el primary como **DOWN**.  
+3. Promueve `mysql-replica` → **PRIMARY** lógico.  
+4. Detiene replicación (IO/SQL threads).  
+5. Registra el evento en los logs (accesible desde la API/dashboard).
 
 
----
+### 🟩 **Cuando el nodo caído vuelve**
 
-# 🚀 Cómo levantar el proyecto
+1. El nodo puede regresar **desactualizado** respecto al nuevo primary.  
+2. `db-watcher` activa el proceso `db-resync`.  
+3. Se toma un **dump** del nodo saludable.  
+4. Se restaura en el nodo que regresó.  
+5. Se reconfigura la replicación (usuario, host, log_file, log_pos).  
+6. Se reinician los IO/SQL threads.  
+7. Los estados son actualizados y registrados.
 
-## 1. Clonar el repositorio
+
+## 🚀 Levantar el proyecto
+
+Asegúrate de tener Docker y Docker Compose instalados.
 
 ```bash
 git clone https://github.com/AFLeonardo/FailOver-BD.git
 cd FailOver-BD
-```
 
-## 2. Levantar todo
+# Levantar todos los servicios
+docker-compose up -d --build
 
-```bash
-docker compose up -d --build
-```
-
-## 3. Ver contenedores
-
-```bash
+# Ver contenedores
 docker ps
 ```
 
 Debes ver:
-
 ```
 mysql-primary
 mysql-replica
 db-watcher
 db-resync
+fastapi-dashboard
 ```
 
----
+# Comandos importantes
 
-# ⚙️ Comandos importantes (para pruebas)
-
-## 🛑 Apagar el primary
+### 🛑 Apagar el primary
 
 ```bash
 docker stop mysql-primary
 ```
-
 Esto simula una caída real.
+#### `db-watcher` debe promover la réplica automáticamente.
 
-`db-watcher` debe promover la réplica automáticamente.
-
-Logs:
+### Comandos para Logs:
 
 ```bash
 docker logs -f db-watcher
+docker logs -f db-resync
+docker logs -f fastapi-dashboard
 ```
 
----
 
-## ▶️ Encender nuevamente el primary
+## 🆗 Encender nuevamente el primary
 
 ```bash
 docker start mysql-primary
 ```
 
-Ahora `db-resync` entra en acción:
+#### Ahora `db-resync` entra en acción:
 
 ```bash
 docker logs -f db-resync
@@ -147,108 +159,82 @@ Debe verse:
 🔁 Restaurando topología...
 ```
 
----
 
-# 🔍 Verificación manual del estado
+## 🌐 Acceso al Dashboard y la API
 
-## Saber quién es PRIMARY y REPLICA
-
-```bash
-docker exec mysql-primary mysql -uroot -pFCFM -e "SELECT @@global.read_only;"
-docker exec mysql-replica mysql -uroot -pFCFM -e "SELECT @@global.read_only;"
+### Dashboard web (HTML estático)
+```
+http://localhost:8000/static/dashboard.html
 ```
 
-Interpretación:
-
-| Valor | Significado |
-|-------|-------------|
-| 0     | PRIMARY     |
-| 1     | REPLICA     |
-
----
-
-# 🔥 Logs completos de cada servicio
-
-## db-watcher (failover)
-
-```bash
-docker logs -f db-watcher
+### FastAPI docs (Swagger UI)
 ```
-
-## db-resync (resincronización)
-
-```bash
-docker logs -f db-resync
-```
-
-## mysql-primary
-
-```bash
-docker logs mysql-primary
-```
-
-## mysql-replica
-
-```bash
-docker logs mysql-replica
+http://localhost:8000/docs
 ```
 
 ---
 
-# 🧠 Comportamiento del Sistema (Resumen de Estados)
-
-### ESTADO A — NORMAL
-```
-mysql-primary  read_only=0  → PRIMARY
-mysql-replica  read_only=1  → REPLICA
-```
-
-### ESTADO B — FAILOVER ACTIVO
-Primary falla → réplica promovida:
+## 🧱 Estructura del repositorio
 
 ```
-mysql-replica read_only=0 → PRIMARY TEMPORAL
+/
+├── db-resync/
+│   ├── Dockerfile
+│   └── resync.py
+│
+├── db-watcher/
+│   ├── Dockerfile
+│   └── watcher.py
+│
+├── fastapi-dashboard/
+│   ├── static/
+│   │   └── dashboard.html
+│   ├── Dockerfile
+│   ├── main.py
+│   └── requirements.txt
+│
+├── DB.sql
+├── docker-compose.yml
+├── LICENSE
+├── README.md
 ```
 
-### ESTADO C — RESYNC
-Cuando vuelve el primary:
 
-```
-backup(repl) → restore(primary)
-se restablece replicación
-```
+## 📓 Notas Técnicas
 
-### Ciclo completo:
-```
-NORMAL → FAILOVER → RESYNC → NORMAL → (repetible N veces)
-```
+### 📌 Replicación MySQL
+- Replicación asíncrona.  
+- `server-id` distinto para cada nodo.  
+- Binlogs habilitados en el primary.  
+
+### 📌 Watcher (`db-watcher`)
+- Implementado en Python.  
+- Registra todos los eventos para monitoreo.  
+
+### 📌 Resync (`db-resync`)
+- Ejecuta dump + restore automático.  
+- Reconfigura la replicación.  
+- Vuelve a enganchar el nodo desactualizado.
+
+### 📌 FastAPI + Dashboard (`fastapi-dashboard`)
+#### main.py expone:
+- Estado del cluster  
+- Logs del watcher  
+- Acciones manuales (failover, resync)  
+
+#### dashboard.html muestra:
+- Estado en tiempo real  
+- Últimos eventos  
+- Indicadores visuales  
+
 
 ---
-
-# 🧪 Prueba completa recomendada
-
-### 1. Levanta todo `docker compose up -d`
-### 2. Muestra read_only de ambos nodos
-### 3. Apaga el primary (`docker stop mysql-primary`)
-### 4. Observa failover (`docker logs -f db-watcher`)
-### 5. Inserta datos en el nuevo primary
-### 6. Enciende primary original (`docker start mysql-primary`)
-### 7. Observa resincronización (`docker logs -f db-resync`)
-### 8. Verifica que la topología regresó a lo normal
-
----
-
 # 🎓 Conclusión
-
 Este proyecto implementa un sistema *totalmente funcional y automatizado* de alta disponibilidad MySQL:
 
-- Failover automático  
-- Resincronización automática  
-- Recuperación completa de la topología  
-- Persistencia de estado  
-- Capacidad de repetir el ciclo indefinidamente  
-- Todo con Docker + Python  
-
-Este nivel de solución es claramente un proyecto final de alta calidad.
-
----
+- Failover automático
+- Resincronización automática
+- Recuperación completa de la topología
+- Capacidad de repetir el ciclo indefinidamente
+- FastAPI para mostrar estado del cluster en el Dashboard
+- Todo con Docker + Python
