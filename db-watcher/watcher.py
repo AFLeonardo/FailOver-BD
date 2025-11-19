@@ -110,7 +110,7 @@ def log_recovery(new_primary, new_replica):
         new_primary,
         new_replica,
         None,
-        None,
+        datetime.now(),
         "RECOVERY"
     )
 
