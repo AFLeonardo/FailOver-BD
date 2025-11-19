@@ -11,7 +11,7 @@ def get_status():
 
 def get_latest_status():
     conn = mysql.connector.connect(
-        host="mysql-primary",      # aquí va tu host (por ejemplo: "localhost" o el nombre del contenedor)
+        host="mysql-replica",      # aquí va tu host (por ejemplo: "localhost" o el nombre del contenedor)
         port=3306,       # si usas otro puerto, cámbialo
         user="appuser",      # tu usuario MySQL
         password="apppass",  # tu contraseña
