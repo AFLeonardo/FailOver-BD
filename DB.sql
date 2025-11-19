@@ -1,6 +1,3 @@
-CREATE DATABASE IF NOT EXISTS Tienda;
-USE Tienda;
-
 CREATE TABLE Clientes (
     id_cliente INT PRIMARY KEY AUTO_INCREMENT,
     nombre VARCHAR(50)
@@ -20,6 +17,17 @@ CREATE TABLE RegistroPedidos (
     total DECIMAL(10,2),
     fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Tabla para registrar failovers y backups
+CREATE TABLE system_events (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    primary_node VARCHAR(50) NOT NULL,
+    replica_node VARCHAR(50) NOT NULL,
+    last_failover DATETIME,
+    last_backup DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 
 INSERT INTO Clientes (nombre)
 VALUES ('Leonardo'), ('Edna'), ('Carlos'), ('Sofía');
