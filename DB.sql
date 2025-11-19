@@ -25,7 +25,8 @@ CREATE TABLE system_events (
     replica_node VARCHAR(50) NOT NULL,
     last_failover DATETIME,
     last_backup DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    event_type VARCHAR(20) NOT NULL DEFAULT 'FAILOVER'
 );
 
 
