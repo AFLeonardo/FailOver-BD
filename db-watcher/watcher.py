@@ -61,7 +61,7 @@ def promover_replica():
 
         fail_over_hecho = True
         print("✅ Failover completado.")
-        log_failover(new_primary="mysql-replica", new_replica="mysql-primary")
+        log_failover(new_primary="mysql-replica", new_replica="None")
     except Error as e:
         print("❌ Error al promover réplica:", e)
 
