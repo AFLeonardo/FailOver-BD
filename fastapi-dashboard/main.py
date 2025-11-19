@@ -21,7 +21,7 @@ def get_latest_status():
     cursor = conn.cursor(dictionary=True)
 
     query = """
-        SELECT primary_node, replica_node, last_failover, last_backup
+        SELECT primary_node, replica_node, last_failover, last_backup, event_type
         FROM system_events
         ORDER BY created_at DESC
         LIMIT 1

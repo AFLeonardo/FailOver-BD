@@ -60,6 +60,7 @@ def preparar_primary_original():
     conn.close()
     print("✅ mysql-primary preparado.")
 
+
 def backup_y_restore():
     print("📦 Iniciando backup desde mysql-replica y restore a mysql-primary...")
 
@@ -70,7 +71,6 @@ def backup_y_restore():
 
     subprocess.run(cmd, shell=True, check=True)
     print("✅ Backup y restore completados.")
-
 
 
 def configurar_primary_como_primary_y_replica_como_replica():
@@ -141,6 +141,17 @@ def configurar_primary_como_primary_y_replica_como_replica():
     print("✅ Topología restaurada: mysql-primary = PRIMARY, mysql-replica = REPLICA.")
 
 
+def habilitar_escritura_en_primary():
+    conn = conectar("mysql-primary")
+    cur = conn.cursor()
+    cur.execute("SET GLOBAL super_read_only = OFF;")
+    cur.execute("SET GLOBAL read_only = OFF;")
+    conn.commit()
+    cur.close()
+    conn.close()
+    print("✅ mysql-primary ahora acepta escrituras.")
+
+
 def main():
     
     print("👀 Iniciando db-resync (resincronización automática)...")
@@ -160,12 +171,13 @@ def main():
             continue
 
         print("✅ Condiciones detectadas: primary original arriba y réplica actuando como primary.")
-        print("🚀 Iniciando proceso de resincronización ESCENARIO B...")
+        print("🚀 Iniciando proceso de resincronización...")
 
         try:
             preparar_primary_original()
             backup_y_restore()
             configurar_primary_como_primary_y_replica_como_replica()
+            habilitar_escritura_en_primary()
             print("🎉 Resincronización completada.")
         except Exception as e:
             print("❌ Error durante la resincronización:", e)

@@ -76,14 +76,42 @@ def log_failover(new_primary, new_replica):
     cursor = conn.cursor()
 
     query = """
-        INSERT INTO system_events (primary_node, replica_node, last_failover, last_backup)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO system_events (primary_node, replica_node, last_failover, last_backup, event_type)
+        VALUES (%s, %s, %s, %s, %s)
     """
     values = (
         new_primary,
         new_replica,
         datetime.now(),
         None,
+        "FAILOVER"
+    )
+
+    cursor.execute(query, values)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def log_recovery(new_primary, new_replica):
+    conn = mysql.connector.connect(
+        host="mysql-primary",
+        port=3306,
+        user="appuser",
+        password="apppass",
+        database="appdb"
+    )
+    cursor = conn.cursor()
+
+    query = """
+        INSERT INTO system_events (primary_node, replica_node, last_failover, last_backup, event_type)
+        VALUES (%s, %s, %s, %s, %s)
+    """
+    values = (
+        new_primary,
+        new_replica,
+        None,
+        None,
+        "RECOVERY"
     )
 
     cursor.execute(query, values)
@@ -104,6 +132,8 @@ def main():
         # y la réplica volvió a estar en read_only (otra vez como réplica).
         if fail_over_hecho and checar_primary() and replica_es_replica():
             print("🔁 Topología restaurada (primary arriba y réplica en read_only). Reactivando watcher.")
+            # IMPLEMENTAR LOG PARA TABLA SYSTEM_EVENTS
+            log_recovery("mysql-primary", "mysql-replica")
             fail_over_hecho = False
             fallos_seguidos = 0
 
