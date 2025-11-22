@@ -185,5 +185,3 @@ db-watcher detecta:
 - Si el primary vuelve a caer → failover automático otra vez  
 - Si luego vuelve → resync automático  
 - Si vuelve a caer → reinicia el ciclo  
-
-Tu sistema soporta **alta disponibilidad real**, estilo profesional 😎🔥
